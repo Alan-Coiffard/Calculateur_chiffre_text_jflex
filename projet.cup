@@ -1,0 +1,224 @@
+import java.io.*;
+import java_cup.runtime.*;
+import java.util.*;
+import java.util.Scanner;
+
+parser code {:
+
+   public static void main(String args[]) throws Exception {
+        new parser(new Yylex(new InputStreamReader(System.in))).parse();
+        System.out.println("Au revoir!");
+   }
+:}
+
+action code {:
+	Map<String, Integer> entiers = new HashMap<>();
+	Map<String, String> chaines = new HashMap<>();
+
+    boolean erreur = false;
+:}
+
+terminal String PLUS, MULT, PAROUV, PARFERM, EOL, EQUAL;
+terminal String PRINT, IDENTE, IDENTS, CHAINE;
+terminal Integer NB;
+
+non terminal Integer expr_int;
+non terminal String expr_str, expr_err;
+non terminal prog;
+
+precedence left PLUS;
+precedence left MULT;
+
+prog ::= expr_int:e 
+    {: 
+        if(e != null) {
+            if(!erreur) {
+                System.out.println(" - : entier " + e); 
+            } else {
+                erreur = false;
+            }
+        } 
+    :} EOL  prog 
+    |expr_str:e 
+    {: 
+        if(e != null) {
+            if(!erreur) {
+                System.out.println(" - : chaine \"" + e + "\"");
+            } else {
+                erreur = false;
+            }
+        }
+    :} EOL prog 
+    |expr_err:e {: if(e != null) System.out.println("Erreur: " + e); :} EOL prog 
+    |EOL prog
+    |PRINT EOL
+    {:  
+        System.out.println("PRINT");
+        System.out.println("  variables entiers :");
+        for (Map.Entry<String, Integer> entry : entiers.entrySet()) {
+            System.out.println("  "+entry.getKey() + " = entier " + entry.getValue()); 
+        }
+        System.out.println("  variables chaines :");
+        for (Map.Entry<String, String> entry : chaines.entrySet()) {
+            System.out.println("  "+entry.getKey() + " = chaine \"" + entry.getValue() + "\""); 
+        }
+    :}
+    |
+    ;
+
+expr_err ::= 
+         expr_str PLUS expr_int     {:RESULT = "type incorrect sur opérateur +";:}
+        |expr_int PLUS expr_str     {:RESULT = "type incorrect sur opérateur +";:}
+        |expr_str PLUS IDENTE       {:RESULT = "type incorrect sur opérateur +";:}
+        |expr_int PLUS IDENTS       {:RESULT = "type incorrect sur opérateur +";:}
+        |IDENTS PLUS expr_int       {:RESULT = "type incorrect sur opérateur +";:}
+        |IDENTE PLUS expr_str       {:RESULT = "type incorrect sur opérateur +";:}
+        |IDENTS EQUAL expr_int      {:RESULT = "type incorrect sur affectation";:}
+        |IDENTE EQUAL expr_str      {:RESULT = "type incorrect sur affectation";:}
+        |expr_str MULT expr_str     {:RESULT = "type incorrect sur opérateur *";:}
+        |IDENTS MULT expr_str       {:RESULT = "type incorrect sur opérateur *";:}
+        |IDENTS MULT IDENTS         {:RESULT = "type incorrect sur opérateur *";:}
+        |expr_str MULT IDENTS       {:RESULT = "type incorrect sur opérateur *";:}
+        |IDENTE MULT expr_str       {:RESULT = "type incorrect sur opérateur *";:}
+        |expr_str MULT IDENTE      {:RESULT = "type incorrect sur opérateur *";:}
+        ;
+
+/* Partie gestion entiers */
+expr_int ::= 
+         expr_int:e1 PLUS expr_int:e2   {:RESULT = e1 + e2;:}
+        |expr_int:e1 MULT expr_int:e2   {:RESULT = e1 * e2;:}
+        |PAROUV expr_int:e PARFERM      {:RESULT = e;:}
+        |IDENTE:i PLUS expr_int:n 
+        {:
+            if(entiers.containsKey(i)) {
+                RESULT = entiers.get(i) + n;
+            } else {
+                erreur = true;
+                RESULT = 0;
+                System.out.println("Erreur l'ident : " + i + " n'est pas correct");
+            }
+        :}
+        |expr_int:n PLUS IDENTE:i
+        {:
+            if(entiers.containsKey(i)) {
+                RESULT = entiers.get(i) + n;
+            } else {
+                erreur = true;
+                RESULT = 0;
+                System.out.println("Erreur l'ident : " + i + " n'est pas correct");
+            }
+        :}
+        |IDENTE:i MULT expr_int:n
+        {:
+            if(entiers.containsKey(i)) {
+                int r = entiers.get(i) * n;
+                RESULT = r;
+            } else {
+                erreur = true;
+                RESULT = 0;
+                System.out.println("Erreur ident : " + i + " n'existe pas");
+            }
+        :}
+        |expr_int:n MULT IDENTE:i
+        {:
+            if(entiers.containsKey(i)) {
+                int r = entiers.get(i) * n;
+                RESULT = r;
+            } else {
+                erreur = true;
+                RESULT = 0;
+                System.out.println("erreur: identificateur inconnu " + i);
+            }
+
+        :}
+        |IDENTE:i EQUAL expr_int:e
+        {: 
+            entiers.put(i, e);
+            System.out.println(" " + i + " : entier " + e);
+        :}
+        |NB:n   
+        {:
+            RESULT = n;
+        :}
+        ;
+
+/* Partie gestion chaines */
+expr_str ::= expr_str:e1 PLUS expr_str:e2 {:RESULT = e1 + e2;:}
+        |expr_str:e1 MULT expr_int:n 
+        {: 
+            String r = "";
+            for(int i = 0; i < n; i++) {
+                r += e1;
+            }
+            RESULT = r;
+        :}
+        |expr_int:n MULT expr_str:e1
+        {: 
+            String r = "";
+            for(int i = 0; i < n; i++) {
+                r += e1;
+            }
+            RESULT = r;
+        :}
+        |IDENTS:i MULT expr_int:n
+        {:
+            if(chaines.containsKey(i)) {
+                String r = "";
+                for(int j = 0; j < n; j++) {
+                    r += chaines.get(i);
+                }
+                RESULT = r;
+            } else {
+                erreur = true;
+                RESULT = "";
+                System.out.println("Erreur ident : " + i + " n'existe pas");
+            }
+        :}
+        |expr_int:n MULT IDENTS:i
+        {:
+            if(chaines.containsKey(i)) {
+                String r = "";
+                for(int j = 0; j < n; j++) {
+                    r += chaines.get(i);
+                }
+                RESULT = r;
+            } else {
+                erreur = true;
+                RESULT = "";
+                System.out.println("Erreur ident : " + i + " n'existe pas");
+            }
+        :}
+        |PAROUV expr_str:e PARFERM {:RESULT = e;:}
+        |IDENTS:i EQUAL expr_str:e
+        {: 
+            chaines.put(i, e);
+            System.out.println(" " + i + " : chaine \"" + e + "\"");
+            RESULT = e;
+            
+        :}
+                |IDENTS:i PLUS expr_str:e
+        {:  
+            if(chaines.containsKey(i)) {
+                RESULT = chaines.get(i) + e;
+            } else {
+                erreur = true;
+                RESULT = "";
+                System.out.println("Erreur ident : " + i + " n'existe pas");
+            }
+        :}
+        | expr_str:e PLUS IDENTS:i
+        {:  
+            if(chaines.containsKey(i)) {
+                RESULT = e + chaines.get(i);
+            } else {
+                erreur = true;
+                RESULT = "";
+                System.out.println("Erreur ident : " + i + " n'existe pas");
+            }
+        :}
+        |CHAINE:c 
+        {:
+        	c = c.substring(1, c.length() -1);
+            RESULT = c;
+        :}
+        ;
